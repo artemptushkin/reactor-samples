@@ -8,6 +8,9 @@ import reactor.core.scheduler.Schedulers
 import reactor.test.StepVerifier
 import java.time.Duration.ofMillis
 import java.time.Duration.ofSeconds
+import reactor.core.publisher.ConnectableFlux
+import java.util.function.Consumer
+import java.util.function.Predicate
 
 
 class FluxSampleTest {
@@ -45,17 +48,57 @@ class FluxSampleTest {
 
     @Test
     fun itEmitsToMultipleSubscribers() {
-        val duration1 = (0..500L).random()
-        val duration2 = (0..500L).random()
-        val duration3 = (0..500L).random()
-        val publisher = Flux
-            .just(1)
-            .delayElements(ofMillis(duration1))
-            .concatWith { Flux.just(2).delayElements(ofMillis(duration2)) }
-            .concatWith { Flux.just(3).delayElements(ofMillis(duration3)) }
+        val publisher = Flux.just(1, 2, 3)
 
-        publisher.subscribe { println(it) }
-        publisher.subscribe { println(it) }
-        Thread.sleep(2000)
+        StepVerifier
+            .create(publisher)
+            .expectNext(1)
+            .expectNext(2)
+            .expectNext(3)
+            .verifyComplete()
+        StepVerifier
+            .create(publisher)
+            .expectNext(1)
+            .expectNext(2)
+            .expectNext(3)
+            .verifyComplete()
+    }
+
+    @Test
+    fun itEmitsFromHotOnConnect() {
+        val source: Flux<String> = Flux.fromIterable(listOf("ram", "sam", "dam", "lam"))
+            .doOnNext { x -> println(x) }
+            .filter { x -> x.startsWith("l") }
+            .map { x -> x.toUpperCase() }
+
+        val connectable = source.publish()
+
+        StepVerifier
+            .create(connectable)
+            .expectSubscription()
+            .expectNoEvent(ofMillis(200))
+            .then(connectable::connect)
+            .expectNext("LAM")
+            .verifyComplete()
+    }
+
+    @Test
+    fun itSubscribesToMultiplePublishers() {
+        val publisher1 = Flux.just(1, 2, 3)
+        val publisher2 = Flux.just(4, 5, 6)
+        val consumer = Consumer<Int> { println(it) }
+
+        publisher1.subscribe(consumer)
+        publisher2.subscribe(consumer)
+    }
+
+    @Test
+    fun itSubscribesToMultiplePublishers() {
+        val publisher1 = Flux.just(1, 2, 3)
+        val publisher2 = Flux.just(4, 5, 6)
+        val consumer = Consumer<Int> { println(it) }
+
+        publisher1.subscribe(consumer)
+        publisher2.subscribe(consumer)
     }
 }
